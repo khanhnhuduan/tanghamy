@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Heart & Galaxy Text</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #000000;
+      overflow: hidden;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <script>
+    const DANH_SACH_CHU = [
+      "KHÁNH NHƯ TẶNG HÀ MY",
+      "VĂN NGUYỄN HÀ MY",
+      "VĂN NGUYỄN HÀ MY",
+      "KHÁNH NHƯ TẶNG KHÁNH NHƯ",
+    ];
+
+    const CAU_HINH = {
+      soHatTraiTim: 6500,        // Số lượng hạt tạo nên trái tim 3D
+      soHatVongXoay: 2200,       // Số lượng hạt bụi sáng ở đĩa xoay bên dưới
+      soSaoNen: 220,             // Số ngôi sao lấp lánh trên nền trời
+      tocDoXoayChu: 0.007,       // Tốc độ xoay của vòng chữ
+      nhipTim: 0.045             // Tốc độ đập của trái tim
+    };
+
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    window.addEventListener("resize", () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    // --- 1. TẠO SAO NỀN & SAO BĂNG ---
+    const stars = Array.from({ length: CAU_HINH.soSaoNen }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      r: Math.random() * 1.3 + 0.3,
+      alpha: Math.random(),
+      speed: (Math.random() * 0.02 + 0.005) * (Math.random() < 0.5 ? 1 : -1)
+    }));
+
+    const meteors = [];
+    function spawnMeteor() {
+      if (meteors.length < 2 && Math.random() < 0.025) {
+        const startX = Math.random() * width * 0.85;
+        const startY = Math.random() * height * 0.45;
+        const angle = Math.PI / 4 + (Math.random() * 0.2 - 0.1);
+        const speed = 9 + Math.random() * 6;
+        meteors.push({
+          x: startX,
+          y: startY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          len: 70 + Math.random() * 60,
+          alpha: 1
+        });
+      }
+    }
+
+    function insideHeart3D(x, y, z) {
+      const a = x * x + 2.25 * z * z + y * y - 1;
+      return a * a * a - (x * x + 0.1125 * z * z) * y * y * y;
+    }
+
+    const heartParticles = [];
+    const heartColors = ["#ff1e4d", "#ff3b6b", "#ff668c", "#e60039", "#ff99b3"];
+
+    while (heartParticles.length < CAU_HINH.soHatTraiTim) {
+      const x = (Math.random() * 2 - 1) * 1.35;
+      const y = (Math.random() * 2 - 1) * 1.35;
+      const z = (Math.random() * 2 - 1) * 1.1;
+      const val = insideHeart3D(x, y, z);
+
+      // Ưu tiên lấy các hạt gần bề mặt ngoài để trái tim sắc nét và có chiều sâu 3D
+      if (val <= 0 && (val > -0.16 || Math.random() < 0.22)) {
+        heartParticles.push({
+          x,
+          y,
+          z,
+          size: Math.random() * 1.5 + 0.7,
+          color: heartColors[Math.floor(Math.random() * heartColors.length)],
+          flickerOffset: Math.random() * Math.PI * 2
+        });
+      }
+    }
+
+    // --- 3. TẠO HẠT ĐĨA XOÁY & HẠT BAY LÊN TÂM TIM ---
+    const vortexParticles = Array.from({ length: CAU_HINH.soHatVongXoay }, () => {
+      // Phân bố theo các vòng đồng tâm
+      const ringIndex = Math.floor(Math.random() * 6);
+      const baseR = 35 + ringIndex * 28 + (Math.random() - 0.5) * 14;
+      return {
+        r: baseR,
+        angle: Math.random() * Math.PI * 2,
+        speed: (0.004 + (220 / (baseR + 60)) * 0.003) * (Math.random() * 0.2 + 0.9),
+        yOffset: (Math.random() - 0.5) * 4,
+        size: Math.random() * 1.4 + 0.5,
+        isPink: Math.random() < 0.35
+      };
+    });
+
+    // Các hạt/chữ nhỏ bay từ tâm đĩa lên mũi nhọn trái tim
+    const risingParticles = Array.from({ length: 45 }, () => ({
+      progress: Math.random(),
+      angle: Math.random() * Math.PI * 2,
+      speed: 0.004 + Math.random() * 0.004,
+      radius: 4 + Math.random() * 22
+    }));
+
+    // --- 4. CẤU HÌNH CÁC VÒNG CHỮ 3D ---
+    const textRings = [
+      { radius: 75,  textIndex: 0, speed: 1.15, fontSize: 10.5, copies: 2 },
+      { radius: 112, textIndex: 2, speed: 0.95, fontSize: 12.0, copies: 2 },
+      { radius: 152, textIndex: 0, speed: 0.80, fontSize: 13.5, copies: 3 },
+      { radius: 192, textIndex: 1, speed: 0.68, fontSize: 14.5, copies: 2 },
+      { radius: 228, textIndex: 2, speed: 0.60, fontSize: 15.0, copies: 2 }
+    ];
+
+    let time = 0;
+
+    function render() {
+      time += 1;
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, width, height);
+
+      const scaleFactor = Math.min(width, height) / 760;
+      const centerX = width / 2;
+      const heartCenterY = height * 0.36;
+      const discCenterY = height * 0.68;
+      const tiltAngle = 0.46; // Độ nghiêng mặt phẳng 3D của vòng chữ
+      const focalLength = 520;
+
+      // 1. Vẽ bầu trời sao lấp lánh
+      for (const s of stars) {
+        s.alpha += s.speed;
+        if (s.alpha > 1 || s.alpha < 0.15) s.speed = -s.speed;
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0.1, Math.min(1, s.alpha))})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 2. Vẽ sao băng
+      spawnMeteor();
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.x += m.vx;
+        m.y += m.vy;
+        m.alpha -= 0.016;
+
+        if (m.alpha <= 0 || m.x > width || m.y > height) {
+          meteors.splice(i, 1);
+          continue;
+        }
+
+        const tailX = m.x - (m.vx / Math.hypot(m.vx, m.vy)) * m.len;
+        const tailY = m.y - (m.vy / Math.hypot(m.vx, m.vy)) * m.len;
+        const grad = ctx.createLinearGradient(m.x, m.y, tailX, tailY);
+        grad.addColorStop(0, `rgba(255, 255, 255, ${m.alpha})`);
+        grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+      }
+
+      // 3. Vẽ các hạt bụi trong vòng xoáy bên dưới
+      for (const p of vortexParticles) {
+        p.angle += p.speed;
+        const r = p.r * scaleFactor;
+        const x3d = r * Math.sin(p.angle);
+        const z3d = r * Math.cos(p.angle);
+        const yProj = p.yOffset * scaleFactor + z3d * Math.sin(tiltAngle);
+        const depth = focalLength - z3d * Math.cos(tiltAngle) * 0.45;
+        const persp = focalLength / depth;
+
+        const sx = centerX + x3d * persp;
+        const sy = discCenterY + yProj * persp;
+        const alpha = Math.max(0.12, Math.min(0.9, (z3d / r + 1.3) * 0.42));
+
+        ctx.fillStyle = p.isPink
+          ? `rgba(255, 120, 160, ${alpha})`
+          : `rgba(255, 255, 255, ${alpha})`;
+        const dotSize = p.size * persp * scaleFactor;
+        ctx.fillRect(sx, sy, dotSize, dotSize);
+      }
+
+      // 4. Vẽ các vòng chữ 3D uốn cong theo quỹ đạo elip
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      for (const ring of textRings) {
+        const phrase = DANH_SACH_CHU[ring.textIndex % DANH_SACH_CHU.length];
+        const r = ring.radius * scaleFactor;
+        const baseAngle = time * CAU_HINH.tocDoXoayChu * ring.speed;
+        const charStep = 0.052 * (145 / ring.radius); // Khoảng cách góc giữa các ký tự
+
+        for (let c = 0; c < ring.copies; c++) {
+          const copyOffset = (c * Math.PI * 2) / ring.copies;
+
+          for (let i = 0; i < phrase.length; i++) {
+            const ch = phrase[i];
+            if (ch === " ") continue;
+
+            // Góc của từng ký tự trên vòng tròn 3D
+            const theta = baseAngle + copyOffset + (i - phrase.length / 2) * charStep;
+            const x3d = r * Math.sin(theta);
+            const z3d = r * Math.cos(theta);
+
+            const yProj = z3d * Math.sin(tiltAngle);
+            const depth = focalLength - z3d * Math.cos(tiltAngle) * 0.48;
+            const persp = focalLength / depth;
+
+            const sx = centerX + x3d * persp;
+            const sy = discCenterY + yProj * persp;
+
+            // Góc tiếp tuyến của quỹ đạo elip tại vị trí ký tự
+            const tangentAngle = Math.atan2(
+              -Math.sin(theta) * Math.sin(tiltAngle),
+              Math.cos(theta)
+            );
+
+            // Độ sáng theo chiều sâu (chữ ở phía trước sáng rõ, phía sau mờ dần)
+            const depthNorm = (z3d / r + 1) * 0.5; // 0 (sau) -> 1 (trước)
+            const alpha = 0.2 + depthNorm * 0.78;
+            const fontSize = Math.max(7, ring.fontSize * scaleFactor * persp);
+
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(tangentAngle);
+            ctx.scale(1, 0.82); // Tạo độ nghiêng phối cảnh cho chữ
+            ctx.font = `bold ${fontSize.toFixed(1)}px "Segoe UI", sans-serif`;
+
+            if (depthNorm > 0.65) {
+              ctx.shadowColor = "rgba(255, 180, 205, 0.8)";
+              ctx.shadowBlur = 6;
+            }
+            ctx.fillStyle = `rgba(255, 245, 250, ${alpha.toFixed(2)})`;
+            ctx.fillText(ch, 0, 0);
+            ctx.restore();
+          }
+        }
+      }
+
+      // 5. Hiệu ứng hạt bay từ tâm vòng xoáy lên đáy trái tim
+      const heartBottomY = heartCenterY + 115 * scaleFactor;
+      for (const rp of risingParticles) {
+        rp.progress += rp.speed;
+        if (rp.progress > 1) rp.progress -= 1;
+
+        const curR = rp.radius * (1 - rp.progress * 0.75) * scaleFactor;
+        const ang = rp.angle + time * 0.03;
+        const sx = centerX + Math.sin(ang) * curR;
+        const sy = discCenterY - rp.progress * (discCenterY - heartBottomY);
+        const alpha = Math.sin(rp.progress * Math.PI) * 0.85;
+
+        ctx.fillStyle = `rgba(255, 190, 210, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.3 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 6. Vẽ Trái Tim Hạt 3D đập nhịp nhàng ở trung tâm trên
+      const beat =
+        1 +
+        0.045 * Math.sin(time * CAU_HINH.nhipTim) +
+        0.02 * Math.sin(time * CAU_HINH.nhipTim * 2);
+      const heartScale = 118 * scaleFactor * beat;
+      const rotY = Math.sin(time * 0.008) * 0.18; // Xoay nhẹ qua lại tạo khối 3D
+      const cosY = Math.cos(rotY);
+      const sinY = Math.sin(rotY);
+
+      for (const hp of heartParticles) {
+        // Xoay nhẹ quanh trục Y
+        const rx = hp.x * cosY - hp.z * sinY;
+        const rz = hp.x * sinY + hp.z * cosY;
+        const ry = -hp.y; // Lật trục Y để đỉnh trái tim hướng lên trên
+
+        const zDepth = focalLength - rz * heartScale * 0.6;
+        const persp = focalLength / zDepth;
+
+        const sx = centerX + rx * heartScale * persp;
+        const sy = heartCenterY + ry * heartScale * persp;
+
+        const twinkle = 0.75 + 0.25 * Math.sin(time * 0.06 + hp.flickerOffset);
+        ctx.fillStyle = hp.color;
+        ctx.globalAlpha = twinkle * Math.min(1, Math.max(0.25, (rz + 1.2) * 0.55));
+
+        const pSize = hp.size * scaleFactor * persp;
+        ctx.fillRect(sx, sy, pSize, pSize);
+      }
+      ctx.globalAlpha = 1;
+
+      requestAnimationFrame(render);
+    }
+
+    render();
+  </script>
+</body>
+</html>
